@@ -26,6 +26,13 @@ def dist(x, y):
     return sqrt(sq(x) + sq(y))
 
 
+def angle_between(a, b):
+    angle = (a - b) % (2 * pi)
+    if angle > pi:
+        angle -= 2 * pi
+    return angle
+
+
 class IK:
     def __init__(self):
         self._initialize_direct_kinematics()
@@ -57,12 +64,12 @@ class IK:
         alpha0, alpha1, alpha2, alpha3, alpha4, alpha5, alpha6 = symbols('alpha0:7')
         a0, a1, a2, a3, a4, a5, a6 = symbols('d0:7')
         d1, d2, d3, d4, d5, d6, d7 = symbols('d1:8')
-        self.q1, self.q2, self.q3, q4, q5, q6, q7 = symbols('q1:8')
+        q1, q2, q3, q4, q5, q6, q7 = symbols('q1:8')
 
         dh_parameters = {
-            alpha0: 0,          a0: 0,      d1: 0.75,   self.q1: self.q1,
-            alpha1: -pi / 2,    a1: 0.35,   d2: 0,      self.q2: -pi/2 + self.q2,
-            alpha2: 0,          a2: 1.25,   d3: 0,      self.q3: self.q3,
+            alpha0: 0,          a0: 0,      d1: 0.75,   q1: q1,
+            alpha1: -pi / 2,    a1: 0.35,   d2: 0,      q2: -pi/2 + q2,
+            alpha2: 0,          a2: 1.25,   d3: 0,      q3: q3,
             alpha3: -pi / 2,    a3: -0.054, d4: 1.5,    q4: q4,
             alpha4: pi / 2,     a4: 0,      d5: 0,      q5: q5,
             alpha5: -pi / 2,    a5: 0,      d6: 0,      q6: q6,
@@ -77,16 +84,16 @@ class IK:
                 [0, 0, 0, 1],
             ])
 
-        T0_1 = dh_to_homogeneous_transform(alpha0, a0, d1, self.q1).subs(dh_parameters)
-        T1_2 = dh_to_homogeneous_transform(alpha1, a1, d2, self.q2).subs(dh_parameters)
-        T2_3 = dh_to_homogeneous_transform(alpha2, a2, d3, self.q3).subs(dh_parameters)
+        T0_1 = dh_to_homogeneous_transform(alpha0, a0, d1, q1).subs(dh_parameters)
+        T1_2 = dh_to_homogeneous_transform(alpha1, a1, d2, q2).subs(dh_parameters)
+        T2_3 = dh_to_homogeneous_transform(alpha2, a2, d3, q3).subs(dh_parameters)
         T3_4 = dh_to_homogeneous_transform(alpha3, a3, d4, q4).subs(dh_parameters)
         T4_5 = dh_to_homogeneous_transform(alpha4, a4, d5, q5).subs(dh_parameters)
         T5_6 = dh_to_homogeneous_transform(alpha5, a5, d6, q6).subs(dh_parameters)
         T6_EE = dh_to_homogeneous_transform(alpha6, a6, d7, q7).subs(dh_parameters)
 
         T0_3 = T0_1 * T1_2 * T2_3
-        self.R0_3 = T0_3[0:3, 0:3]
+        self.R0_3 = lambdify((q1, q2, q3), T0_3[0:3, 0:3])
         self.T0_EE = T0_3 * T3_4 * T4_5 * T5_6 * T6_EE
 
     def cosine_method_angles(self, sides):
@@ -104,7 +111,7 @@ class IK:
             angles.append(acos(n / (2 * d)))
         return angles
 
-    def inverse_kinematics(self, pose):
+    def inverse_kinematics(self, pose, last_pose=None):
         orientation = pose.orientation
         (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
             [orientation.x, orientation.y, orientation.z, orientation.w]
@@ -130,19 +137,32 @@ class IK:
 
         # Cosine method to find theta2 and theta3
         angles = self.cosine_method_angles(link_length)
+        # From the multiple possible solutions, the positive angles were chosen
+        # due to physical constrains of the robot
         theta2 = pi / 2 - angles[0] - atan2(WC[2] - 0.75, dist(WC[0], WC[1]) - 0.35)
         theta3 = pi / 2 - (angles[1] + 0.036)
 
         # Calculate rotation from base frame to WC
-        R0_3 = self.R0_3.evalf(subs={self.q1: theta1, self.q2: theta2, self.q3: theta3})
+        R0_3 = self.R0_3(theta1, theta2, theta3)
 
         # Calculate R3_6 through inverse of R0_3 times the tranform to the end effector
-        R3_6 = R0_3.inv('LU') * R_EE
+        R3_6 = R0_3.transpose() * R_EE
 
         # Calculate Euler angles
         theta4 = atan2(R3_6[2, 2], -R3_6[0, 2])
         theta5 = atan2(dist(R3_6[0, 2], R3_6[2, 2]), R3_6[1, 2])
         theta6 = atan2(-R3_6[1, 1], R3_6[1, 0])
+        if last_pose:
+            def minimize_rotation(previous, desired):
+                return min(desired, desired + pi, key=lambda x: abs(angle_between(desired, previous)))
+
+            # If last position is known, minimize EE rotation using the fact
+            # it's symmetric
+            theta6 = minimize_rotation(last_pose[5], theta6)
+            optimal_theta4 = minimize_rotation(last_pose[3], theta4)
+            if theta4 != optimal_theta4:
+                theta4 = optimal_theta4
+                theta5 = -theta5
 
         return theta1, theta2, theta3, theta4, theta5, theta6
 
@@ -158,11 +178,12 @@ def handle_calculate_IK(req):
 
     # Initialize service response
     joint_trajectory_list = []
+    pose = None
     for x in xrange(len(req.poses)):
         joint_trajectory_point = JointTrajectoryPoint()
 
-        pose = req.poses[x]
-        thetas = ik.inverse_kinematics(pose)
+        next_pose = req.poses[x]
+        pose = ik.inverse_kinematics(next_pose, pose)
 
         # # FK for error calculation
         # FK = T0_EE.evalf(subs={q1: theta1, q2: theta2, q3: theta3, q4: theta4, q5: theta5, q6: theta6})
@@ -170,7 +191,7 @@ def handle_calculate_IK(req):
         # your_ee = [FK[0, 3], FK[1, 3], FK[2, 3]]
 
         # Populate response for the IK request
-        joint_trajectory_point.positions = thetas
+        joint_trajectory_point.positions = pose
         joint_trajectory_list.append(joint_trajectory_point)
 
     rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
