@@ -17,13 +17,15 @@ from geometry_msgs.msg import Pose
 from mpmath import *
 from sympy import *
 
+CALCULATE_IK_ERROR = False
+
 
 def sq(n):
     return n * n
 
 
-def dist(x, y):
-    return sqrt(sq(x) + sq(y))
+def dist(*coords):
+    return sqrt(sum(sq(x) for x in coords))
 
 
 def angle_between(a, b):
@@ -94,7 +96,7 @@ class IK:
 
         T0_3 = T0_1 * T1_2 * T2_3
         self.R0_3 = lambdify((q1, q2, q3), T0_3[0:3, 0:3])
-        self.T0_EE = T0_3 * T3_4 * T4_5 * T5_6 * T6_EE
+        self.T0_EE = lambdify((q1, q2, q3, q4, q5, q6), (T0_3 * T3_4 * T4_5 * T5_6 * T6_EE))
 
     def cosine_method_angles(self, sides):
         assert len(sides) == 3
@@ -166,6 +168,10 @@ class IK:
 
         return theta1, theta2, theta3, theta4, theta5, theta6
 
+    def forward_kinematics(self, thetas):
+        EE = self.T0_EE(*thetas)
+        return EE[0:3, 3]
+
 
 ik = IK()
 
@@ -185,10 +191,13 @@ def handle_calculate_IK(req):
         next_pose = req.poses[x]
         pose = ik.inverse_kinematics(next_pose, pose)
 
-        # # FK for error calculation
-        # FK = T0_EE.evalf(subs={q1: theta1, q2: theta2, q3: theta3, q4: theta4, q5: theta5, q6: theta6})
-        # your_wc = [WC[0], WC[1], WC[2]]
-        # your_ee = [FK[0, 3], FK[1, 3], FK[2, 3]]
+        # FK for error calculation
+        if CALCULATE_IK_ERROR:
+            calculated = ik.forward_kinematics(pose)
+            error = dist(next_pose.position.x - calculated[0],
+                         next_pose.position.y - calculated[1],
+                         next_pose.position.z - calculated[2])
+            print("End effector offset is %04.8f" % error)
 
         # Populate response for the IK request
         joint_trajectory_point.positions = pose
