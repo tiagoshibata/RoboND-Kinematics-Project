@@ -135,13 +135,14 @@ class IK:
         theta1 = atan2(WC[1], WC[0])
 
         # Link length from 2 to 3, 3 to WC and 2 to WC
-        link_length = [1.501, dist(dist(WC[0], WC[1]) - 0.35, WC[2] - 0.75), 1.25]
+        xy_joint_2_WC_distance = dist(WC[0], WC[1]) - 0.35
+        link_length = [1.501, dist(xy_joint_2_WC_distance, WC[2] - 0.75), 1.25]
 
         # Cosine method to find theta2 and theta3
         angles = self.cosine_method_angles(link_length)
-        # From the multiple possible solutions, the positive angles were chosen
-        # due to physical constrains of the robot
-        theta2 = pi / 2 - angles[0] - atan2(WC[2] - 0.75, dist(WC[0], WC[1]) - 0.35)
+        # From the multiple possible solutions, the one with joint 3 above joint
+        # 2 was chosen due to physical constrains of the robot
+        theta2 = pi / 2 - angles[0] - atan2(WC[2] - 0.75, xy_joint_2_WC_distance)
         theta3 = pi / 2 - (angles[1] + 0.036)
 
         # Calculate rotation from base frame to WC
