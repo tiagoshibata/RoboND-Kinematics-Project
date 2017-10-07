@@ -146,9 +146,15 @@ theta1 = atan2(WC[1], WC[0])
 
 The link lengths and the positions of joints 2 and 4 are known, so the joint angles `theta2` and `theta3` can be derived using the cosine method. The three sides of the triangle for the cosine method are the link lengths and the distance between joints 2 and 4.
 
-The distance between joints 2 and 4 can be calculated by the distance on the XY plane (distance from the base link to the wrist center minus the distance from the base link to joint 2 (`a1 = 0.35`))) and the distance on the Z axis (distance from the base link to the wrist center minus the Z distance from the base link to joint 2 (`d1 = 0.75`)): `dist(dist(WC[0], WC[1]) - 0.35, WC[2] - 0.75)`
+The distance between joints 2 and 4 can be calculated by the distance projected on the XY plane (distance from the base link to the wrist center minus the distance from the base link to joint 2 (`a1 = 0.35`))) and the distance on the Z axis (distance from the base link to the wrist center minus the Z distance from the base link to joint 2 (`d1 = 0.75`)): `dist(dist(WC[0], WC[1]) - 0.35, WC[2] - 0.75)`
 
-Given the target positions of joints 2 and 4, most times there are two possible configurations of joint 3 that can achieve the target positions. In this exercice I always choose the configuration with joint 3 "above" joint 2 (most closely to the zero configuration), since there are physical limits to the movement below the robot (joint 3 could hit the ground).
+Given the target positions of joints 2 and 4, most times there are two possible configurations of joint 3 that can achieve the target positions. In this exercice I always choose the configuration with joint 3 "above" joint 2 (most closely to the zero configuration), since there are physical limits to the movement below the robot (joint 3 could hit the ground):
+
+```python
+xy_joint_2_WC_distance = dist(WC[0], WC[1]) - 0.35
+link_length = [1.501, dist(xy_joint_2_WC_distance, WC[2] - 0.75), 1.25]
+angles = self.cosine_method_angles(link_length)
+```
 
 After the positions of joints 1, 2 and 3 have been solved, the tranformation from joint 3 to 6 can be calculated using the inverse of R1_3 and the end effector position. The inverse of R1_3 is the same of the transpose, since the rotation matrix is orthonormal. As shown in the class:
 
@@ -380,3 +386,7 @@ def handle_calculate_IK(req):
     rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
     return CalculateIKResponse(joint_trajectory_list)
 ```
+
+### Results
+
+The project was completed successfully. Some optimizations were added to the suggested project based on class material, the provided walkthrough or my own ideas. After observing the robot, I believe the IK code is robust enough and optimizations to other parts of the pipeline, such as the planner, would allow thhe robot to move faster in a more optimized trajectory.
