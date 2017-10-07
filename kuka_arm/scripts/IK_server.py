@@ -60,7 +60,7 @@ class IK:
             [0, 0, 1],
         ])
         R_correction = R_z.subs(y, radians(180)) * R_y.subs(p, radians(-90))
-        self.R_EE = R_z * R_y * R_x * R_correction
+        self.R_EE = lambdify((r, p, y), R_z * R_y * R_x * R_correction)
 
     def _initialize_direct_kinematics(self):
         alpha0, alpha1, alpha2, alpha3, alpha4, alpha5, alpha6 = symbols('alpha0:7')
@@ -119,7 +119,7 @@ class IK:
             [orientation.x, orientation.y, orientation.z, orientation.w]
         )
 
-        R_EE = self.R_EE.subs({'r': roll, 'p': pitch, 'y': yaw})
+        R_EE = Matrix(self.R_EE(roll, pitch, yaw))
 
         position = pose.position
         EE = Matrix([
