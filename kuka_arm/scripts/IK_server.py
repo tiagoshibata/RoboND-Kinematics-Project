@@ -152,6 +152,15 @@ class IK:
         R3_6 = R0_3.transpose() * R_EE
 
         # Calculate Euler angles
+        # Symbolic R3_6:
+        # [
+        # [-sin(q4) * sin(q6) + cos(q4) * cos(q5) * cos(q6),    -sin(q4) * sin(q6) + cos(q4) * cos(q5) * sin(q6),    -cos(q4) * sin(q5)],
+        # [sin(q5) * cos(q6),                                   -sin(q5) * sin(q6),                                  cos(q5)],
+        # [-cos(q4) * sin(q6) - sin(q4) * cos(q5) * cos(q6),    -cos(q4) * cos(q6) + sin(q4) * cos(q5) * sin(q6),    sin(q4) * sin(q5)]
+        # ]
+        # q4 can be derived from atan2(R3_6[2, 2], -R3_6[0, 2]) = atan2(sin(q4) * sin(q5), -(-cos(q4) * sin(q5))
+        # q5 can be derived from atan2(dist(R3_6[0, 2], R3_6[2, 2]), R3_6[1, 2]) = atan2(dist(-cos(q4) * sin(q5), sin(q4) * sin(q5)), cos(q5)) = atan2(sqrt(sin(q5) ** 2 * (sin(q4) ** 2 + cos(q4) ** 2)), cos(q5)) = atan2(sin(q5), cos(q5))
+        # q6 can be derived from atan2(-R3_6[1, 1], R3_6[1, 0]) = atan2(-(-sin(q5) * sin(q6)), sin(q5) * cos(q6))
         theta4 = atan2(R3_6[2, 2], -R3_6[0, 2])
         theta5 = atan2(dist(R3_6[0, 2], R3_6[2, 2]), R3_6[1, 2])
         theta6 = atan2(-R3_6[1, 1], R3_6[1, 0])

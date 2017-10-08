@@ -138,7 +138,11 @@ self.T0_EE = lambdify((q1, q2, q3, q4, q5, q6), (T0_3 * T3_4 * T4_5 * T5_6 * T6_
 
 Using the spherical wrist, the IK problem can be decoupled into Inverse Position Kinematics and Inverse Orientation Kinematics problems. First, the position of the wrist center will be determined. For a given wrist center position, we must ajust 3 DOF (joints 1, 2 and 3) to achieve it.
 
-Adjusting joint 1 is trivial. It rotates around the Z axis of the base frame. Since joints 1, 2 and 3 are always contained in the same plane, joint 1 is the sole responsible for pointing the wrist center in the correct rotation around the Z axis of the base link. Thus, `theta1` can be derived from the X and Y positions of the wrist center:
+Adjusting joint 1 is trivial. It rotates around the Z axis of the base frame. Since joints 1, 2 and 3 are always aligned when projected on the XY plane, joint 1 is the sole responsible for pointing the wrist center in the correct rotation around the Z axis of the base link:
+
+![Joints 1 through 3 projected onto the XY plane](misc_images/joint-1.png)
+
+Thus, `theta1` can be derived from the X and Y positions of the wrist center:
 
 ```python
 theta1 = atan2(WC[1], WC[0])
@@ -148,12 +152,22 @@ The link lengths and the positions of joints 2 and 4 are known, so the joint ang
 
 The distance between joints 2 and 4 can be calculated by the distance projected on the XY plane (distance from the base link to the wrist center minus the distance from the base link to joint 2 (`a1 = 0.35`))) and the distance on the Z axis (distance from the base link to the wrist center minus the Z distance from the base link to joint 2 (`d1 = 0.75`)): `dist(dist(WC[0], WC[1]) - 0.35, WC[2] - 0.75)`
 
-Given the target positions of joints 2 and 4, most times there are two possible configurations of joint 3 that can achieve the target positions. In this exercice I always choose the configuration with joint 3 "above" joint 2 (most closely to the zero configuration), since there are physical limits to the movement below the robot (joint 3 could hit the ground):
+Given the target positions of joints 2 and 4, most times there are two possible configurations of joint 3 that can achieve the target positions of joints 2 and 4:
+
+![Possible joint 3 positions](misc_images/joint-3.png)
+
+In this exercice I always choose the configuration with joint 3 "above" joint 2 (most closely to the zero configuration), since there are physical limits to the movement below the robot (joint 3 could hit the ground). The cosine method was used to calculate the internal angles of the triangle given the link lengths and the distance between joints 2 and 4:
+
+![Cosine method](misc_images/cosine-method.png)
+
+In the chosen robot zero state, a counter clockwise rotation around joint 2 (larger internal angle of the triangle) is a negative rotation around the Z axis, so the derived internal angle must be subtracted from theta2. Furthermore, the angle below the triangle must be added, and can be derived with `WC[2] - 0.75` and `xy_joint_2_WC_distance` from the image above:
 
 ```python
 xy_joint_2_WC_distance = dist(WC[0], WC[1]) - 0.35
 link_length = [1.501, dist(xy_joint_2_WC_distance, WC[2] - 0.75), 1.25]
 angles = self.cosine_method_angles(link_length)
+theta2 = pi / 2 - angles[0] - atan2(WC[2] - 0.75, xy_joint_2_WC_distance)
+theta3 = pi / 2 - (angles[1] + 0.036)
 ```
 
 After the positions of joints 1, 2 and 3 have been solved, the tranformation from joint 3 to 6 can be calculated using the inverse of R1_3 and the end effector position. The inverse of R1_3 is the same of the transpose, since the rotation matrix is orthonormal. As shown in the class:
@@ -389,4 +403,13 @@ def handle_calculate_IK(req):
 
 ### Results
 
-The project was completed successfully. Some optimizations were added to the suggested project based on class material, the provided walkthrough or my own ideas. After observing the robot, I believe the IK code is robust enough and optimizations to other parts of the pipeline, such as the planner, would allow thhe robot to move faster in a more optimized trajectory.
+The project was completed successfully. Some optimizations were added to the suggested project based on class material, the provided walkthrough or my own ideas. After observing the robot, I believe the IK code is robust enough and optimizations to other parts of the pipeline, such as the planner, would allow the robot to move faster in a more optimized trajectory.
+
+The robot can reach, grasp, carry and drop the can multiple times:
+
+![Simulation 1](misc_images/simulation-1.png)
+![Simulation 2](misc_images/simulation-2.png)
+![Simulation 3](misc_images/simulation-3.png)
+![Simulation 4](misc_images/simulation-4.png)
+![Simulation 5](misc_images/simulation-5.png)
+![Simulation 6](misc_images/simulation-6.png)
